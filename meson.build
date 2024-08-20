@@ -1,12 +1,13 @@
 project('graphene', 'c',
-        version: '1.11.1',
-        license: 'MIT',
-        meson_version: '>= 0.55.3',
-        default_options: [
-          'buildtype=debugoptimized',
-          'c_std=c99',
-          'warning_level=1'
-        ])
+  version: '1.11.1',
+  license: 'MIT',
+  meson_version: '>= 1.0',
+  default_options: [
+    'buildtype=debugoptimized',
+    'c_std=c99',
+    'warning_level=1'
+  ],
+)
 
 cc = meson.get_compiler('c')
 host_system = host_machine.system()
@@ -44,9 +45,9 @@ darwin_versions = [current + 1, '@0@.@1@'.format(current + 1, revision)]
 
 # Paths
 graphene_prefix = get_option('prefix')
-graphene_libdir = join_paths(graphene_prefix, get_option('libdir'))
-graphene_includedir = join_paths(graphene_prefix, get_option('includedir'))
-graphene_datadir = join_paths(graphene_prefix, get_option('datadir'))
+graphene_libdir = graphene_prefix / get_option('libdir')
+graphene_includedir = graphene_prefix / get_option('includedir')
+graphene_datadir = graphene_prefix / get_option('datadir')
 
 graphene_api_path = '@0@-@1@'.format(meson.project_name(), graphene_api_version)
 
@@ -198,18 +199,9 @@ elif get_option('optimization') in ['2', '3', 's']
 endif
 
 extra_args = []
-# Detect and set symbol visibility
-if get_option('default_library') != 'static'
-  if host_system == 'windows'
-    conf.set('DLL_EXPORT', true)
-    conf.set('_GRAPHENE_PUBLIC', '__declspec(dllexport) extern')
-    if cc.get_id() != 'msvc'
-      extra_args += ['-fvisibility=hidden']
-    endif
-  else
-    conf.set('_GRAPHENE_PUBLIC', '__attribute__((visibility("default"))) extern')
-    extra_args += ['-fvisibility=hidden']
-  endif
+# Export DLL symbols on Windows when building a shared library
+if get_option('default_library') != 'static' and  host_system == 'windows'
+  conf.set('DLL_EXPORT', true)
 endif
 
 # Optional dependency on GObject
@@ -232,14 +224,11 @@ if get_option('gobject_types')
 endif
 
 # Optional dependency on GObject-Introspection; if GObject is disabled
-# then we don't build introspection data either
-gir = find_program('g-ir-scanner', required : get_option('introspection'))
-build_gir = build_gobject and gir.found()
-# Disable g-i when cross compiling by default because it rarely works unless
-# special care has been taken, in which case the user can enable the option.
-if meson.is_cross_build() and not get_option('introspection').enabled()
-  build_gir = false
-endif
+# then we don't build introspection data either.
+#
+# We only build introspection if we can run binaries on the host.
+gir = find_program('g-ir-scanner', required: get_option('introspection'))
+build_gir = get_option('introspection').allowed() and build_gobject and gir.found() and meson.can_run_host_binaries()
 
 # Check for InitOnce on Windows
 if host_system == 'windows'
@@ -413,6 +402,31 @@ endif
 
 # Scalar is always available as a fallback
 graphene_simd += [ 'scalar' ]
+
+graphene_build_shared = false
+graphene_build_static = false
+if get_option('default_library') == 'both'
+  graphene_build_static = true
+  graphene_build_shared = true
+elif get_option('default_library') == 'static'
+  graphene_build_static = true
+elif get_option('default_library') == 'shared'
+  graphene_build_shared = true
+endif
+
+graphene_build_both = graphene_build_static and graphene_build_shared
+graphene_build_static_only = graphene_build_static and not graphene_build_shared
+graphene_build_shared_only = graphene_build_shared and not graphene_build_static
+
+if graphene_build_shared and graphene_build_static and (
+  host_system == 'windows' or host_system == 'cygwin')
+  error('On Windows default_library must be "shared" or "static" but not "both"')
+endif
+
+if graphene_build_static_only
+  graphene_conf.set('GRAPHENE_STATIC_COMPILATION', '1')
+endif
+
 
 python = import('python')
 gnome = import('gnome')

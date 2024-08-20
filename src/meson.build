@@ -1,6 +1,7 @@
 sources = [
   'graphene-alloc.c',
   'graphene-box.c',
+  'graphene-box2d.c',
   'graphene-euler.c',
   'graphene-frustum.c',
   'graphene-matrix.c',
@@ -45,6 +46,7 @@ libgraphene = library(
   version: libversion,
   soversion: soversion,
   darwin_versions: darwin_versions,
+  gnu_symbol_visibility: 'hidden',
   install: true,
   dependencies: [ mathlib, threadlib ] + platform_deps,
   c_args: extra_args + common_cflags + debug_flags + [
@@ -98,7 +100,7 @@ graphene_dep_sources = []
 # Introspection
 if build_gir
   python = python.find_installation('python3')
-  identfilter_py = join_paths(meson.current_source_dir(), 'identfilter.py')
+  identfilter_py = meson.current_source_dir() / 'identfilter.py'
 
   gir_extra_args = [
     '--identifier-filter-cmd=@0@ "@1@"'.format(python.full_path(), identfilter_py),
@@ -120,6 +122,7 @@ if build_gir
     header: 'graphene-gobject.h',
     install: true,
     extra_args: gir_extra_args,
+    fatal_warnings: get_option('werror'),
   )
   graphene_dep_sources += graphene_gir
 endif
